@@ -1,1 +1,4 @@
 Data/MNIST/
+log/
+layers/__pycache__
+__pycache__/
