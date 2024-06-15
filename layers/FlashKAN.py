@@ -2,12 +2,17 @@
 import torch
 from torch import nn
 from torch.func import vmap, grad
-from splines import evaluate_all, b_spline_diff
+from .splines import evaluate_all, b_spline_diff
 # %%
 class FlashKAN(nn.Module):
     def __init__(self, in_dim, out_dim, G, 
                  t0=-1., t1=1., k=4, act=nn.functional.silu):
         super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.G = G
+        self.k = k
+        
         w = torch.empty([G+k, in_dim, out_dim])
         self.w = nn.Parameter(torch.nn.init.xavier_normal_(w), 
                               requires_grad=True)
@@ -22,6 +27,64 @@ class FlashKAN(nn.Module):
     def forward(self, x):
         return fast_kan.apply(x, self.w, self.t, 
                               self.k, self.act)
+    
+    def b_splines(self, x: torch.Tensor):
+        """
+        Compute the B-spline bases for the given input tensor.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, in_features).
+
+        Returns:
+            torch.Tensor: B-spline bases tensor of shape (batch_size, in_features, grid_size + spline_order).
+        """
+        assert x.dim() == 2 and x.size(1) == self.in_features
+
+        grid: torch.Tensor = (
+            self.grid
+        )  # (in_features, grid_size + 2 * spline_order + 1)
+        x = x.unsqueeze(-1)
+        bases = ((x >= grid[:, :-1]) & (x < grid[:, 1:])).to(x.dtype)
+        for k in range(1, self.k):
+            bases = (
+                (x - grid[:, : -(k + 1)])
+                / (grid[:, k:-1] - grid[:, : -(k + 1)])
+                * bases[:, :, :-1]
+            ) + (
+                (grid[:, k + 1 :] - x)
+                / (grid[:, k + 1 :] - grid[:, 1:(-k)])
+                * bases[:, :, 1:]
+            )
+
+        assert bases.size() == (
+            x.size(0),
+            self.in_features,
+            self.grid_size + self.spline_order,
+        )
+        return bases.contiguous()
+    
+    def curve2coeff(self, x: torch.Tensor, y: torch.Tensor):
+        """
+        Compute the coefficients of the curve that interpolates the given points.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, in_dim).
+            y (torch.Tensor): Output tensor of shape (batch_size, out_dim).
+
+        Returns:
+            torch.Tensor: Coefficients tensor of shape (out_dim, in_dim, G+k)
+        """
+        assert x.dim() == 2 and x.size(1) == self.in_dim
+        assert y.size() == (x.size(0), self.out_dim)
+
+        A = self.b_splines(x)  # (batch_size, in_dim, G + k)
+        solution = torch.linalg.lstsq(
+            A.flatten(1,-1), y
+        ).solution  # (in_dim*(G+k), out_dim)
+        result = solution.reshape(A.shape[2], A.shape[1], -1)
+        
+        return result.contiguous()
+
 # %% Custom gradients
 class fast_kan(torch.autograd.Function):
     @staticmethod
@@ -29,7 +92,6 @@ class fast_kan(torch.autograd.Function):
         in_dim, out_dim = x.shape[1], w.shape[2]
         ctx.k = k
         ctx.act = act
-        ctx.w_shape = w.shape
         
         i_full, y1 = evaluate_all(k, t, x)
         # (batch, in_dim, 2k), (batch, in_dim, k)
@@ -49,17 +111,17 @@ class fast_kan(torch.autograd.Function):
         y2 = torch.cat([y1, act(x).unsqueeze(-1)], -1).unsqueeze(-1)
         # [batch, in, k+1, 1]
         
-        ctx.save_for_backward(x, t, i_full, slice2, slice3, w2, y2)
+        ctx.save_for_backward(x, t, w, i_full, slice2, slice3, w2, y2)
         
         return torch.sum(w2 * y2, dim=(1,2))
         
     @staticmethod
     def backward(ctx, D_out):
-        x, t, i_full, slice2, slice3, w2, y2 = ctx.saved_tensors
-        k, act, w_shape = ctx.k, ctx.act, ctx.w_shape
+        x, t, w, i_full, slice2, slice3, w2, y2 = ctx.saved_tensors
+        k, act = ctx.k, ctx.act
         batch_dim = x.shape[0]
                 
-        Dw = torch.zeros(w_shape, dtype=x.dtype, device=x.device)
+        Dw = torch.zeros_like(w)
         # Add the last 'row' of w
         slice1 = torch.cat([i_full[..., :k], 
                             torch.full_like(i_full[..., :1], -1)], 

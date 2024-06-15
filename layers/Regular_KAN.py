@@ -2,7 +2,7 @@
 import torch
 from torch import nn
 from torch.func import vmap, grad
-from splines import _evaluate, evaluate_diff
+from .splines import _evaluate, evaluate_diff
 # %%
 class Regular_KAN(nn.Module):
     def __init__(self, in_dim, out_dim, G, 

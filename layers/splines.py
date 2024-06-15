@@ -28,7 +28,7 @@ def b_spline(x, i, t, k: int):
                 / (t2[..., j+1:] - t2[..., 1:(-j)])
                 * bases[..., 1:], 0, 0, 0
             )
-    return bases
+    return bases.contiguous()
 
 def b_spline_diff(x, i, t, k):
     y = torch.nan_to_num(
@@ -39,7 +39,7 @@ def b_spline_diff(x, i, t, k):
             (t[i[..., k:]] - t[i[..., 1:k+1]]), 0., 0., 0.
         )
     
-    return y*(k-1)
+    return y.contiguous()*(k-1)
 # %%
 def _in_local_support(x, t_end, ta, tb):
     return torch.logical_or(torch.logical_and(ta <= x, x < tb),

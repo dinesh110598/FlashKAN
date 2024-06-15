@@ -5,7 +5,9 @@ import torchvision
 import torchvision.transforms as transforms
 from layers import FlashKAN, Regular_KAN, KANLinear
 
+from time import time
 from torch.profiler import profile, ProfilerActivity
+from torch.utils.tensorboard import SummaryWriter
 # %%
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
@@ -19,7 +21,7 @@ def test_initialization():
     t = torch.linspace(t0, t1, G+1)
     t = torch.cat([torch.full([k-1], t0), t,
                     torch.full([k-1], t1)], 0).to(device)
-    w = torch.zeros([G+k+1, in_dim, out_dim]).to(device)
+    w = torch.zeros([G+k, in_dim, out_dim]).to(device)
     w = torch.nn.init.xavier_normal_(w).to(device)
     
     return batch_dim, in_dim, out_dim, t0, t1, k, G, x, t, w
@@ -56,9 +58,10 @@ def create_reg_kan(G):
     ).to(device)
     
 net = create_flash_kan(25)
+opt = torch.optim.Adam(net.parameters(), lr=0.001)
 # %%
 with torch.profiler.profile(
-        schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+        schedule=torch.profiler.schedule(wait=1, warmup=1, active=5, repeat=1),
         on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/flashkan_mnist'),
         record_shapes=True,
         profile_memory=True,
@@ -67,7 +70,7 @@ with torch.profiler.profile(
 
     for i, data in enumerate(trainloader, 1):
         prof.step()  # Need to call this at each step to notify profiler of steps' boundary.
-        if i >= 1 + 1 + 3:
+        if i >= 1 + 1 + 5:
             break
         # get the inputs; data is a list of [inputs, labels]
         inputs, labels = data

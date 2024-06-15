@@ -1,4 +1,6 @@
 Data/MNIST/
 log/
 layers/__pycache__
-__pycache__/
+__pycache__
+train_acc.svg
+val_acc.svg
