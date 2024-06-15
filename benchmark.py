@@ -39,12 +39,16 @@ test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch,
 criterion = nn.CrossEntropyLoss()
 metric = lambda out, labels: (torch.argmax(out,1) == labels).float().mean()
 # %% Define model(s)
-def create_model(w, G):
+def create_model(w, G, model_name="flashkan"):
+    model_dict = {"flashkan": FlashKAN,
+                  "efficientkan": KANLinear}
+    KANLayer = model_dict[model_name]
+    
     net = nn.Sequential(
         nn.Flatten(),
-        FlashKAN(28*28, w, G),
+        KANLayer(28*28, w, G),
         nn.Dropout(0.2),
-        FlashKAN(w, 10, G)
+        KANLayer(w, 10, G)
     ).to(device)
     opt = torch.optim.Adam(net.parameters(), lr=0.001)
     return net, opt
