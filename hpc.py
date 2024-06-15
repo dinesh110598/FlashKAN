@@ -126,13 +126,13 @@ for G, w in product(Gs, ws):
     hist = train_model(net, opt, 1)
     logs_effkan.append(hist)
 # %%
-with open("./flashkan_grid.json", 'w') as f:
+with open("./Data/flashkan_grid.json", 'w') as f:
     data = {}
     for i, (G, w) in enumerate(product(Gs, ws)):
         data[f"G_{G}_w_{w}"] = logs_flashkan[i]
     json.dump(data, f)
 
-with open("./effkan_grid.json", 'w') as f:
+with open("./Data/effkan_grid.json", 'w') as f:
     data = {}
     for i, (G, w) in enumerate(product(Gs, ws)):
         data[f"G_{G}_w_{w}"] = logs_effkan[i]
