@@ -116,14 +116,14 @@ logs_flashkan = []
 
 for G, w in product(Gs, ws):
     net, opt = create_model(w, G, "flashkan")
-    hist = train_model(net, opt, 1)
+    hist = train_model(net, opt, 30)
     logs_flashkan.append(hist)
 # %%
 logs_effkan = []
 
 for G, w in product(Gs, ws):
     net, opt = create_model(w, G, "efficientkan")
-    hist = train_model(net, opt, 1)
+    hist = train_model(net, opt, 30)
     logs_effkan.append(hist)
 # %%
 with open("./Data/flashkan_grid.json", 'w') as f:
